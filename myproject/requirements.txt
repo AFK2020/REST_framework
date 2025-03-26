@@ -1,0 +1,4 @@
+pillow == 11.1.0
+django == 5.1.7
+python == 3.10.12
+djangorestframework == 4.12.2
