@@ -1,8 +1,7 @@
 
-# services: 
+# services:
 #       web:
 #         build: .
 #         command: python manage.py makerunserver 0.0.0.0:8000
 #         ports:
 #             - 8000:8000
-        

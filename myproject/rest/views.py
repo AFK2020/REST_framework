@@ -1,32 +1,30 @@
-from rest_framework import status
-from rest_framework import viewsets
-from django.shortcuts import get_object_or_404
+from rest_framework import generics, status, viewsets
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest.permissions import IsManager
-from django.db.models import Q
-from rest_framework.permissions import AllowAny
+from rest_framework.decorators import action
+
+from rest.enum import RoleChoice
 from rest.models import (
-    Profile,
-    Project,
     Comment,
-    Task,
     Document,
     Notification,
+    Profile,
+    Project,
+    Task,
     Timeline,
 )
+from rest.permissions import IsManager
 from rest.serializers import (
-    ProjectCreateSerializer,
-    TaskSerializer,
-    UserRegisterSerializer,
+    CommentsSerializer,
     DocumentSerializer,
     NotificationSerializer,
-    CommentsSerializer,
+    ProjectCreateSerializer,
+    TaskSerializer,
     TimelineSerializer,
+    UserRegisterSerializer,
 )
-from rest_framework import generics
-from rest.enum import RoleChoice
 
 
 class UserRegistrationView(generics.CreateAPIView):
@@ -44,7 +42,7 @@ class LogoutView(APIView):
                 {"message": "Logged out successfully"},
                 status=status.HTTP_205_RESET_CONTENT,
             )
-        except Exception as e:
+        except Exception:
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -105,14 +103,39 @@ class TaskAPIView(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         task_id = kwargs.get("pk")
         task = Task.objects.get(id=task_id)
+        try:
+            if request.user != task.project.manager:
+                return Response(
+                    {
+                        "Auth Error": "Managers can only updates tasks for their own projects."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        except Exception:
+            return super().partial_update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["PATCH"])
+    def assign_team_member(self, request, pk=None):
+        try:
+            task = Task.objects.get(pk=pk)
+            assign = request.data.get("assignee")
+            if not assign:
+                return Response(status=status.HTTP_400_BAD_REQUEST)
+            member = Profile.objects.get(id=assign)
+        except Exception:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
         if request.user != task.project.manager:
             return Response(
-                {
-                    "Auth Error": "Managers can only updates tasks for their own projects."
-                },
+                {"Auth Error": "Managers can only assign tasks of their own projects."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        return super().partial_update(request, *args, **kwargs)
+
+        task.assignee = member
+        task.save()
+        return Response(
+            {"Detail": "Member assigned to project"}, status=status.HTTP_200_OK
+        )
 
 
 class DocumentAPIView(viewsets.ModelViewSet):
@@ -121,25 +144,71 @@ class DocumentAPIView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         project_id = self.request.data.get("project")
-        return self.queryset.filter(project=project_id)
-    
-    def get_object(self):
-        queryset = Document.objects.all()
-        return queryset
-    
+        result = self.queryset.filter(project=project_id)
+        return result
+
     def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+        document_id = kwargs.get("pk")
+        try:
+            instance = self.queryset.get(pk=document_id)
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
+        except Exception:
+            return Response(
+                {
+                    "Error": "No such Document exsist for the manager trying to access it. "
+                    "Managers can only access documents for projects that they manage"
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
 
 class NotificationAPIView(viewsets.ModelViewSet):
     queryset = Notification.objects.all()
     serializer_class = NotificationSerializer
 
+    @action(detail=True, methods=["PATCH", "PUT"])
+    def read_notification(self, request, pk=None):
+        try:
+            notifcation = Notification.objects.get(pk=pk)
+        except Exception:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        if request.user != notifcation.user:
+            return Response(
+                {"Auth Error": "Users can only access their notifications"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        notifcation.is_read = True
+        notifcation.save()
+        return Response(
+            {"Detail": "Notification marked as Read"}, status=status.HTTP_200_OK
+        )
+
 
 class CommentAPIView(viewsets.ModelViewSet):
     queryset = Comment.objects.all()
     serializer_class = CommentsSerializer
+
+    def get_queryset(self):
+        project_id = self.request.data.get("project")
+        result = self.queryset.filter(project=project_id)
+        return result
+
+    def retrieve(self, request, *args, **kwargs):
+        comments_id = kwargs.get("pk")
+        try:
+            instance = self.queryset.get(pk=comments_id)
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
+        except Exception:
+            return Response(
+                {
+                    "Error": "No comment exsist for the project that user is trying to access. "
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
 
 class TimelineAPIView(viewsets.ModelViewSet):
@@ -147,91 +216,93 @@ class TimelineAPIView(viewsets.ModelViewSet):
     serializer_class = TimelineSerializer
 
 
-##########################
-# class ProfileListAPIView(generics.ListAPIView):
-#     queryset = Profile.objects.all()
-#     serializer_class = ProfileSerializer
-#     permission_classes = [AllowAny]
+"""
+class ProfileListAPIView(generics.ListAPIView):
+    queryset = Profile.objects.all()
+    serializer_class = ProfileSerializer
+    permission_classes = [AllowAny]
 
 
-# class ProfileDetailAPIView(generics.RetrieveAPIView):
-#     queryset = Profile.objects.all()
-#     serializer_class = ProfileSerializer
+class ProfileDetailAPIView(generics.RetrieveAPIView):
+    queryset = Profile.objects.all()
+    serializer_class = ProfileSerializer
 
 
-# class ProfileListCreateAPIView(generics.ListCreateAPIView):
-#     queryset = Profile.objects.all()
-#     serializer_class = ProfileCreateSerializer
+class ProfileListCreateAPIView(generics.ListCreateAPIView):
+    queryset = Profile.objects.all()
+    serializer_class = ProfileCreateSerializer
 
-# class CommentListAPIView(generics.ListAPIView):
-#     queryset = Comment.objects.all()
-#     serializer_class = CommentsSerializer
-
-
-# class UserCommentListAPIView(generics.ListAPIView):
-#     queryset = Comment.objects.all()
-#     serializer_class = CommentsSerializer
-#     permission_classes = [IsAuthenticated]
-
-#     def get_queryset(self):     # filtering based on specific/ authenticated user
-#         user = self.request.user
-#         qs = super().get_queryset()
-#         return qs.filter(author=user)
+class CommentListAPIView(generics.ListAPIView):
+    queryset = Comment.objects.all()
+    serializer_class = CommentsSerializer
 
 
-# class ProfileDetailAPIView(generics.RetrieveAPIView):
-#     queryset = Comment.objects.all()
-#     serializer_class = CommentsSerializer
-#     # lookup_url_kwarg = 'comment_id'
-#     # if in url you write comment_id instead of primary key then this will be used.
-#     # it will take the id int value given in url and compare it with the pk which is id
-#     # eg. path('comment/<int comment_id>',views.CommentListAPIView),
+class UserCommentListAPIView(generics.ListAPIView):
+    queryset = Comment.objects.all()
+    serializer_class = CommentsSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):     # filtering based on specific/ authenticated user
+        user = self.request.user
+        qs = super().get_queryset()
+        return qs.filter(author=user)
 
 
-# class ProjectInfoView(APIView):
-#     def get(self,request):
-#         projects = Project.objects.all()
-#         serializer = ProjectInfoSerializer({
-#             'projects' : projects,
-#             'count' : len(projects)
-#         })
-#         return Response(serializer.data)
+class ProfileDetailAPIView(generics.RetrieveAPIView):
+    queryset = Comment.objects.all()
+    serializer_class = CommentsSerializer
+    # lookup_url_kwarg = 'comment_id'
+    # if in url you write comment_id instead of primary key then this will be used.
+    # it will take the id int value given in url and compare it with the pk which is id
+    # eg. path('comment/<int comment_id>',views.CommentListAPIView),
 
 
-# @api_view(["GET"])
-# def project_info(request):
-#     projects = Project.objects.all()
-#     serializer = ProjectInfoSerializer({
-#         'projects' : projects,
-#         'count' : len(projects)
-#     })
-#     return Response(serializer.data)
+class ProjectInfoView(APIView):
+    def get(self,request):
+        projects = Project.objects.all()
+        serializer = ProjectInfoSerializer({
+            'projects' : projects,
+            'count' : len(projects)
+        })
+        return Response(serializer.data)
 
 
-################ Function Based Views #################
+@api_view(["GET"])
+def project_info(request):
+    projects = Project.objects.all()
+    serializer = ProjectInfoSerializer({
+        'projects' : projects,
+        'count' : len(projects)
+    })
+    return Response(serializer.data)
 
-# @api_view(["GET"])
-# def profile_list(request):
-#     profiles = Profile.objects.all()
-#     serializer = ProfileSerializer(profiles, many=True)
-#     return Response(serializer.data)
 
-# @api_view(["GET"])
-# def profile_detail(request, pk):
-#     # profile = Profile.objects.get(id=pk)
-#     profile = get_object_or_404(Profile, pk=pk)
-#     serializer = ProfileSerializer(profile, many=False)  # only one profile
-#     return Response(serializer.data)
+############### Function Based Views #################
 
-# @api_view(["GET"])
-# def comment_list(request):
-#     comments = Comment.objects.all()
-#     serializer = CommentsSerializer(comments, many=True)
-#     return Response(serializer.data)
+@api_view(["GET"])
+def profile_list(request):
+    profiles = Profile.objects.all()
+    serializer = ProfileSerializer(profiles, many=True)
+    return Response(serializer.data)
 
-# @api_view(["GET"])
-# def comment_detail(request, pk):
-#     # profile = Profile.objects.get(id=pk)
-#     comment = get_object_or_404(Comment, pk=pk)
-#     serializer = Comment(comment, many=False)  # only one profile
-#     return Response(serializer.data)
+@api_view(["GET"])
+def profile_detail(request, pk):
+    # profile = Profile.objects.get(id=pk)
+    profile = get_object_or_404(Profile, pk=pk)
+    serializer = ProfileSerializer(profile, many=False)  # only one profile
+    return Response(serializer.data)
+
+@api_view(["GET"])
+def comment_list(request):
+    comments = Comment.objects.all()
+    serializer = CommentsSerializer(comments, many=True)
+    return Response(serializer.data)
+
+@api_view(["GET"])
+def comment_detail(request, pk):
+    # profile = Profile.objects.get(id=pk)
+    comment = get_object_or_404(Comment, pk=pk)
+    serializer = Comment(comment, many=False)  # only one profile
+    return Response(serializer.data)
+"
+"""

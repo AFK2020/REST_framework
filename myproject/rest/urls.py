@@ -1,7 +1,9 @@
-from django.urls import path,include
-from rest import views
+from django.urls import include, path
 from rest_framework import routers
-from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
+from rest_framework_simplejwt.views import (TokenObtainPairView,
+                                            TokenRefreshView)
+
+from rest import views
 
 router = routers.DefaultRouter()
 router.register(r'project', viewset=views.ProjectAPIView, basename='project')
@@ -13,8 +15,8 @@ router.register(r'timeline', viewset=views.TimelineAPIView, basename='timeline')
 
 
 urlpatterns = [
-    path('',include(router.urls)),
-    path('register/',views.UserRegistrationView.as_view()),
+    path('', include(router.urls)),
+    path('register/', views.UserRegistrationView.as_view()),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('logout/', views.LogoutView.as_view(), name='auth_logout'),

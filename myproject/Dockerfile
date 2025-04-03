@@ -4,7 +4,7 @@ ENV PYTHONUNBUFFERED 1
 
 WORKDIR /app
 
-ADD . /app 
+ADD . /app
 
 COPY ./requirements.txt /app/requirements.txt
 

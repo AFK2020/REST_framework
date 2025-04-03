@@ -1,12 +1,15 @@
-from django.db import models
-from rest.Validators.custom_validator import validate_image
-from rest.customfield import CustomPhoneNumberField
-from rest.enum import RoleChoice,StatusChoice
 from django.contrib.auth.models import (
     AbstractBaseUser,
-    PermissionsMixin,
     BaseUserManager,
+    PermissionsMixin,
 )
+from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+from rest.customfield import CustomPhoneNumberField
+from rest.enum import RoleChoice, StatusChoice
+from rest.Validators.custom_validator import validate_image
 
 
 class CustomUserManager(BaseUserManager):
@@ -20,7 +23,7 @@ class CustomUserManager(BaseUserManager):
             email=self.normalize_email(email),
             first_name=first_name,
             last_name=last_name,
-            **extra_fields
+            **extra_fields,
         )
         user.set_password(password)
         user.save(using=self._db)
@@ -68,9 +71,13 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
 
 class Profile(models.Model):
-    user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, verbose_name="Name")
+    user = models.OneToOneField(
+        CustomUser, on_delete=models.CASCADE, verbose_name="Name"
+    )
     role = models.CharField(
-        max_length=50, choices=RoleChoice.choices(), verbose_name="Professional Designation"
+        max_length=50,
+        choices=RoleChoice.choices(),
+        verbose_name="Professional Designation",
     )
     profile_picture = models.ImageField(
         upload_to="profile_pics/",
@@ -86,7 +93,13 @@ class Profile(models.Model):
 
 
 class Project(models.Model):
-    manager = models.ForeignKey(CustomUser, on_delete=models.CASCADE, blank=True,null=True, related_name="manager_user")
+    manager = models.ForeignKey(
+        CustomUser,
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
+        related_name="manager_user",
+    )
     title = models.CharField(max_length=50)
     description = models.TextField(verbose_name="Description", blank=True, null=True)
     start_date = models.DateField()
@@ -96,9 +109,10 @@ class Project(models.Model):
     def __str__(self):
         return self.title
 
+
 class Task(models.Model):
     title = models.CharField(max_length=200)
-    description = models.TextField(verbose_name="Description" , blank=True, null=True)
+    description = models.TextField(verbose_name="Description", blank=True, null=True)
     status = models.CharField(
         max_length=50, choices=StatusChoice.choices(), verbose_name="Task Status"
     )
@@ -117,7 +131,7 @@ class Document(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     file = models.FileField(upload_to="documents/")
-    version = models.CharField(max_length=50,blank=True)
+    version = models.CharField(max_length=50, blank=True)
     project = models.ForeignKey(Project, on_delete=models.PROTECT)
 
     def __str__(self):
@@ -135,21 +149,36 @@ class Comment(models.Model):
         return self.author.email
 
 
-
 class Notification(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     message = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
-    project = models.ForeignKey('Project', on_delete=models.CASCADE, null=True, blank=True) 
-    
+    project = models.ForeignKey(
+        "Project", on_delete=models.CASCADE, null=True, blank=True
+    )
+
     def __str__(self):
-        return f'{self.message}'
-    
-    
+        return f"{self.message}"
+
+
 class Timeline(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     timestamp = models.DateTimeField(auto_now_add=True)
-    
+
     def __str__(self):
-        return f'{self.project.title}'
+        return f"{self.project.title}"
+
+
+@receiver(post_save, sender=Project)
+def create_timeline_on_project_save(sender, instance, created, **kwargs):
+    if created:
+        Timeline.objects.create(project=instance)
+
+
+# @receiver(post_save, sender = Project)
+# def create_notification_on_project_save(sender, instance, created, **kwargs):
+#     if created:
+#         Notification.objects.create(
+
+#         )

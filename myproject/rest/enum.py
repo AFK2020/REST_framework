@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class RoleChoice(Enum):
     MANAGER = 'manager'
     QA = 'qa'
@@ -11,7 +12,6 @@ class RoleChoice(Enum):
     def choices(cls):
         return [(key.value , key.name) for key in cls]
 
-    
 
 class StatusChoice(Enum):
     OPEN = 'open'
@@ -19,7 +19,6 @@ class StatusChoice(Enum):
     WORKING = 'working'
     AWAITINGREL = 'waiting release'
     WAITINGQA = 'waiting qa'
-
 
     @classmethod
     def choices(cls):
