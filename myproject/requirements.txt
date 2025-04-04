@@ -1,4 +1,12 @@
-pillow == 11.1.0
-django == 5.1.7
-PyJWT==2.9.0
-djangorestframework==3.15.2
+# pillow == 11.1.0
+# django == 5.1.7
+# PyJWT==2.9.0
+# djangorestframework==3.15.2
+# djangorestframework_simplejwt==5.5.0
+# psycopg2-binary==2.9.10
+
+pillow
+django
+djangorestframework
+djangorestframework_simplejwt
+psycopg2-binary
