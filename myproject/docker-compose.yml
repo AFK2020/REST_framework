@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+      web:
+        build: .
+        container_name: myapp
+        volumes:
+        - .:/app  # Ensures that code changes are reflected inside the container
+        ports:
+            - "8000:8000"
+        environment:
+        - DEBUG=True
+        - DJANGO_SUPERUSER_EMAIL=afk@gmail.com
+        - DJANGO_SUPERUSER_PASSWORD=test
+        depends_on:
+        - db
+        command: python manage.py runserver 0.0.0.0:8000
+
+      db:
+        image: postgres:15
+        environment:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        volumes:
+          - postgres_data:/var/lib/postgresql/postgres_data
+        ports:
+          - 5432:5432
+
+volumes:
+  postgres_data:
